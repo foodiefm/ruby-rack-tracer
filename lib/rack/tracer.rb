@@ -13,31 +13,41 @@ module Rack
     # @param on_start_span [Proc, nil] A callback evaluated after a new span is created.
     # @param errors [Array<Class>] An array of error classes to be captured by the tracer
     #        as errors. Errors are **not** muted by the middleware, they're re-raised afterwards.
-    def initialize(app, tracer: OpenTracing.global_tracer, on_start_span: nil, errors: [StandardError])
+    # @param headers[Hash]
+    def initialize(app,
+                   tracer: OpenTracing.global_tracer,
+                   on_start_span: nil,
+                   errors: [StandardError],
+                   headers: [])
       @app = app
       @tracer = tracer
       @on_start_span = on_start_span
       @errors = errors
+      @headers = convert_rack_env_header_names(headers)
     end
 
     def call(env)
       method = env[REQUEST_METHOD]
 
       context = @tracer.extract(OpenTracing::FORMAT_RACK, env)
-      span = @tracer.start_span(method,
-        child_of: context,
-        tags: {
-          'component' => 'rack',
-          'span.kind' => 'server',
-          'http.method' => method,
-          'http.url' => env[REQUEST_URI],
-          'http.uri' => env[REQUEST_URI] # For zipkin, not OT convention
-        }
-      )
 
-      if @on_start_span
-        @on_start_span.call(span)
+      tags = {
+        'component' => 'rack',
+        'span.kind' => 'server',
+        'http.method' => method,
+        'http.url' => env[REQUEST_URI],
+        'http.uri' => env[REQUEST_URI] # For zipkin, not OT convention
+      }
+
+      @headers.each do |original, rack_header|
+        tags["http.#{original}"] = env[rack_header] if env[rack_header]
       end
+
+      span = @tracer.start_span(method,
+                                child_of: context,
+                                tags: tags)
+
+      @on_start_span.call(span) if @on_start_span
 
       env['rack.span'] = span
 
@@ -62,6 +72,11 @@ module Rack
       if route = env['sinatra.route']
         route.split(' ').last
       end
+    end
+
+    def convert_rack_env_header_names(headers)
+      Hash[headers
+           .collect { |name| [name, 'HTTP_' + name.upcase.tr('-', '_')] }]
     end
   end
 end

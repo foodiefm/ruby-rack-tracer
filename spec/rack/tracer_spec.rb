@@ -10,8 +10,9 @@ RSpec.describe Rack::Tracer do
 
   let(:env) do
     Rack::MockRequest.env_for('/test/this/route', {
-      method: method
-    })
+                                :method =>   method,
+                                "HTTP_MY_CUSTOM_HEADER" => "1"
+                              })
   end
 
   let(:method) { 'POST' }
@@ -30,6 +31,13 @@ RSpec.describe Rack::Tracer do
       respond_with do |env|
         expect(env['rack.span']).to be_a(Logasm::Tracer::Span)
         expect(env['rack.span'].context.parent_id).to be_nil
+        ok_response
+      end
+    end
+
+    it 'adds given headers as tags' do
+      respond_with do |env|
+        expect(logger.calls.first[-1][:trace].keys).to include('http.MY-CUSTOM-HEADER')
         ok_response
       end
     end
@@ -106,7 +114,11 @@ RSpec.describe Rack::Tracer do
   end
 
   def respond_with(&app)
-    middleware = described_class.new(app, tracer: tracer, on_start_span: on_start_span)
+    middleware = described_class.new(app,
+                                     tracer: tracer,
+                                     on_start_span: on_start_span,
+                                     headers: ['MY-CUSTOM-HEADER']
+                                    )
     middleware.call(env)
   end
 
