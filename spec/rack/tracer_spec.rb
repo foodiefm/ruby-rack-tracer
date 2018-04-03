@@ -130,7 +130,8 @@ RSpec.describe Rack::Tracer do
   end
 
   def respond_with(trust_incoming_span: true, &app)
-    middleware = described_class.new(app, tracer: tracer, on_start_span: on_start_span, trust_incoming_span: trust_incoming_span)
+    OpenTracing.global_tracer = tracer
+    middleware = described_class.new(app, on_start_span: on_start_span, trust_incoming_span: trust_incoming_span)
     middleware.call(env)
   end
 
