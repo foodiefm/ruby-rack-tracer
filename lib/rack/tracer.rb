@@ -17,7 +17,7 @@ module Rack
     # @param errors [Array<Class>] An array of error classes to be captured by the tracer
     #        as errors. Errors are **not** muted by the middleware, they're re-raised afterwards.
     def initialize(app, # rubocop:disable Metrics/ParameterLists
-                   tracer: OpenTracing.global_tracer,
+                   tracer: nil,
                    on_start_span: nil,
                    on_finish_span: nil,
                    trust_incoming_span: true,
@@ -32,9 +32,9 @@ module Rack
 
     def call(env)
       method = env[REQUEST_METHOD]
-
-      context = @tracer.extract(OpenTracing::FORMAT_RACK, env) if @trust_incoming_span
-      scope = @tracer.start_active_span(
+      tracer = @tracer.nil? ? OpenTracing.global_tracer : @tracer
+      context = tracer.extract(OpenTracing::FORMAT_RACK, env) if @trust_incoming_span
+      scope = tracer.start_active_span(
         method,
         child_of: context,
         tags: {
